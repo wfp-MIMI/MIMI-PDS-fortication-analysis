@@ -1,0 +1,53 @@
+Item_Code,item_name,conversion_factor_to_kg,notes,ifpri_conversion
+5,cheese,0.001,,
+6,lassi,0.01,100rs fo 1l~1kg,
+7,buttermilk,0.007,25Rs fo 180ml,
+8,apricot,0.003,400Rs for 1kg,
+11, soda drinks,1,1l = 1kg,
+12,breakfast cereals,0.003,corn flakes 450g for 133Rs,0.004
+13,biscuits,0.005,10Rs for 50g,0.008
+15,noodles,0.005,20Rs for 100g,0.005
+76,Cooked meals purchased at a subsidized rate,0.3,,
+92,other milk products,0.011,9Rs for 100ml of lassi ,
+160,milk : liquid(litre),1.05,,
+166,ice-cream,0.003,1l = 200Rs=0.6kg,
+167,other milk products,0.01,average of other milk,
+190,eggs(no),0.053,,0.04
+216,lemon(no.),0.058,,0.58
+220,banana (no.),0.115,,0.136
+223,pineapple (no.),0.905,assume whole pineapple,
+224,coconut(no.),0.98,assume whole coconut,0.283
+225,green coconut(no.),1.3,assume whole coconut,0.283
+228,"orange , mausambi (no.)",0.14,,0.14
+250,ginger,0.001,1gm = 0.001kg,
+251,garlic,0.001,1gm = 0.001kg,
+252,cumin,0.001,1gm = 0.001kg,
+253,coriander,0.001,1gm = 0.001kg,
+254,tumeric ,0.001,1gm = 0.001kg,
+255,black pepper,0.001,1gm = 0.001kg,
+256,dry chillies,0.001,1gm = 0.001kg,
+257,tamarind,0.001,1gm = 0.001kg,
+258,curry powder,0.001,1gm = 0.001kg,
+260,oilseeds,0.001,1gm = 0.001kg,
+261,other spices,0.001,1gm = 0.001kg,
+263,poppy seeds,0.001,1gm = 0.001kg,
+270,tea : cups(no),0.2,200g per teacup,0.1
+271,tea: leaf,0.001,1gm = 0.001kg,
+272,coffee : cups(no),0.2,200g per teacup,0.1
+273,coffee: power,0.001,1gm = 0.001kg,
+274,mineral water(litre),1,,
+275,cold beverage : bottled/canned (litre),1,,
+276,fruit juice and shake (litre),0.007,1l = 130Rs,0.01
+278,"other beverages : cocoa, chocolate etc.",0.003,100ml = 28Rs,0.006
+280,cooked meals purchased (no.),0.3,,
+281,cooked meals received free in workplace(no.),0.3,,
+282,cooked meals received as assistance (no.),0.3,,
+283,"cooked snacks purchased [samosa, puri, paratha, burger, chowmein, idli, dosa, vada, chops, pakora, pao, bhaji, etc.]",0.003,1 Rs to 3g,0.003
+284,other served processed food,0.003,1 Rs to 3g,0.003
+290,"cake, pastry",0.003,100g = 300Rs,0.006
+291,chocolates,0.001,80Rs for 100g,0.0012
+292,papad,0.005,20Rs for 100g,0.003
+293,chips nachos,0.003,40Rs fo 100g,0.003
+294,pickles,0.004,25Rs for 100g,0.006
+295,"sauce, jam, jelly, mayonnaise",0.001,1gm = 0.001kg,
+296,other packaged foods,0.003,,0.003
