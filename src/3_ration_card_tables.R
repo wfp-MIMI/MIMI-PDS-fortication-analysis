@@ -30,12 +30,12 @@ rm(list = c("rq_packages", "installed_packages"))
 
 source("functions/aggregated_inadequacy.R")
 source("functions/general_inadequacy.R")
-source("functions/get_har.R")
+# source("functions/get_har.R")
 
 #---------------------------------------------------------------------------
 
 # set paths
-figure_path <- "figures/ration_cards/"
+figure_path <- "figures/"
 raw_path <- "data/raw/"
 processed_path <- "data/processed/"
 
@@ -55,6 +55,7 @@ rm(data_list)
 hh_mn_intake <- readRDS(paste0(processed_path, "ind_nss2223_base_case.rds"))
 ind_nss2223_hh_info <- read_csv(paste0(processed_path,'ind_nss2223_hh_info.csv'))
 ind_nss2223_base_ai <- read_csv(paste0(processed_path,'ind_nss2223_base_ai.csv'))
+ind_nss2223_food_consumption <- readRDS(paste0(processed_path, "ind_nss2223_food_consumption.rds")) 
 
 nss_states <- tibble::tibble(
   adm1 = sprintf("%02d", 1:37),
@@ -215,6 +216,7 @@ ration_card_total <- type_rc |>
     ),
     any_card = case_match(
       ration_card_type,
+      "APL" ~ "Yes",
       "AAY" ~ "Yes",
       "PHH" ~ "Yes",
       "BPL" ~ "Yes",
@@ -680,189 +682,282 @@ gtsave(
 )
 
 # Objective 3 #############################
-# ---- Per-household fortification contributions ----------------------------
+
+# ── Fortification specs -----------------------------------------------------
+
+ind_fort_spec <- data.frame(
+  commodity = c("rice", "rice", "wheat", "wheat"),
+  specs = c("India", "WFP", "India", "WFP"),
+  fe_mg = c(3.525, 7, 1.7625, 2),
+  folate_mcg = c(10, 130, 10*0.83, 130 * 0.83),
+  vitb12_mcg = c(0.1, 1, 0.085, 0.85)
+)
+
+get_spec <- function(commodity_name, spec_name) {
+  row <- ind_fort_spec |>
+    dplyr::filter(commodity == commodity_name, specs == spec_name)
+  as.list(row)
+}
+
+# ── Commodity construction --------------------------------------------------
+
+build_commodity <- function(food_df, hh_df, item_codes) {
+  food_df |>
+    dplyr::filter(item_code %in% item_codes) |>
+    dplyr::group_by(hhid) |>
+    dplyr::summarise(quantity_g = sum(quantity_g), .groups = "drop") |>
+    dplyr::right_join(hh_df, by = "hhid") |>
+    dplyr::mutate(
+      quantity_g = quantity_g / afe,
+      quantity_g = ifelse(is.na(quantity_g), 0, quantity_g)
+    )
+}
+
+rice <- build_commodity(ind_nss2223_food_consumption,
+                        ind_nss2223_hh_info,
+                        c(61, 101))
+
+wheat <- build_commodity(ind_nss2223_food_consumption,
+                         ind_nss2223_hh_info,
+                         c(62, 107))
+
+# ── Fortification contributions (BOTH specs) --------------------------------
+
 fort_contributions <- wheat |>
-  select(hhid, quantity_g) |>
-  mutate(
-    fe_mg_fort_wf = quantity_g * wheat_spec$fe_mg / 100,
-    folate_mcg_fort_wf = quantity_g * wheat_spec$folate_mcg / 100,
-    vitb12_mcg_fort_wf = quantity_g * wheat_spec$vitb12_mcg / 100
+  dplyr::select(hhid, quantity_g) |>
+  dplyr::mutate(
+    fe_mg_fort_wf_india = quantity_g * get_spec("wheat","India")$fe_mg / 100,
+    fe_mg_fort_wf_wfp   = quantity_g * get_spec("wheat","WFP")$fe_mg / 100,
+    folate_mcg_fort_wf_india = quantity_g * get_spec("wheat","India")$folate_mcg / 100,
+    folate_mcg_fort_wf_wfp   = quantity_g * get_spec("wheat","WFP")$folate_mcg / 100,
+    vitb12_mcg_fort_wf_india = quantity_g * get_spec("wheat","India")$vitb12_mcg / 100,
+    vitb12_mcg_fort_wf_wfp   = quantity_g * get_spec("wheat","WFP")$vitb12_mcg / 100
   ) |>
-  left_join(ind_nss2223_base_ai, by = "hhid") |>
-  left_join(
+  dplyr::left_join(ind_nss2223_base_ai, by = "hhid") |>
+  dplyr::left_join(
     rice |>
-      select(hhid, quantity_g) |>
-      mutate(
-        fe_mg_fort_rice = quantity_g * rice_spec$fe_mg / 100,
-        folate_mcg_fort_rice = quantity_g * rice_spec$folate_mcg / 100,
-        vitb12_mcg_fort_rice = quantity_g * rice_spec$vitb12_mcg / 100
+      dplyr::select(hhid, quantity_g) |>
+      dplyr::mutate(
+        fe_mg_fort_rice_india = quantity_g * get_spec("rice","India")$fe_mg / 100,
+        fe_mg_fort_rice_wfp   = quantity_g * get_spec("rice","WFP")$fe_mg / 100,
+        folate_mcg_fort_rice_india = quantity_g * get_spec("rice","India")$folate_mcg / 100,
+        folate_mcg_fort_rice_wfp   = quantity_g * get_spec("rice","WFP")$folate_mcg / 100,
+        vitb12_mcg_fort_rice_india = quantity_g * get_spec("rice","India")$vitb12_mcg / 100,
+        vitb12_mcg_fort_rice_wfp   = quantity_g * get_spec("rice","WFP")$vitb12_mcg / 100
       ) |>
-      select(-quantity_g),
+      dplyr::select(-quantity_g),
     by = "hhid"
   ) |>
-  mutate(across(-c(hhid, quantity_g), ~ ifelse(is.na(.), 0, .)))
+  dplyr::mutate(across(-hhid, ~ ifelse(is.na(.), 0, .)))
 
+# ── Scenario construction ---------------------------------------------------
 
-# ---- Scenario nutrient totals (base / rice / wheat / both) -----------------
 df_long <- fort_contributions |>
-  mutate(
-    # Base
+  dplyr::mutate(
+    # base
     fe_mg_base = fe_mg,
     folate_mcg_base = folate_mcg,
     vitb12_mcg_base = vitb12_mcg,
-
-    # Rice fortified
-    fe_mg_rice = fe_mg + fe_mg_fort_rice,
-    folate_mcg_rice = folate_mcg + folate_mcg_fort_rice,
-    vitb12_mcg_rice = vitb12_mcg + vitb12_mcg_fort_rice,
-
-    # Wheat fortified
-    fe_mg_wheat = fe_mg + fe_mg_fort_wf,
-    folate_mcg_wheat = folate_mcg + folate_mcg_fort_wf,
-    vitb12_mcg_wheat = vitb12_mcg + vitb12_mcg_fort_wf,
-
-    # Both fortified
-    fe_mg_both = fe_mg + fe_mg_fort_rice + fe_mg_fort_wf,
-    folate_mcg_both = folate_mcg + folate_mcg_fort_rice + folate_mcg_fort_wf,
-    vitb12_mcg_both = vitb12_mcg + vitb12_mcg_fort_rice + vitb12_mcg_fort_wf
-  ) |>
-  select(
-    hhid,
-    matches("^(fe_mg|folate_mcg|vitb12_mcg)_(base|rice|wheat|both)$")
+    
+    # rice
+    fe_mg_rice_india = fe_mg + fe_mg_fort_rice_india,
+    fe_mg_rice_wfp   = fe_mg + fe_mg_fort_rice_wfp,
+    folate_mcg_rice_india = folate_mcg + folate_mcg_fort_rice_india,
+    folate_mcg_rice_wfp   = folate_mcg + folate_mcg_fort_rice_wfp,
+    vitb12_mcg_rice_india = vitb12_mcg + vitb12_mcg_fort_rice_india,
+    vitb12_mcg_rice_wfp   = vitb12_mcg + vitb12_mcg_fort_rice_wfp,
+    
+    # wheat
+    fe_mg_wheat_india = fe_mg + fe_mg_fort_wf_india,
+    fe_mg_wheat_wfp   = fe_mg + fe_mg_fort_wf_wfp,
+    folate_mcg_wheat_india = folate_mcg + folate_mcg_fort_wf_india,
+    folate_mcg_wheat_wfp   = folate_mcg + folate_mcg_fort_wf_wfp,
+    vitb12_mcg_wheat_india = vitb12_mcg + vitb12_mcg_fort_wf_india,
+    vitb12_mcg_wheat_wfp   = vitb12_mcg + vitb12_mcg_fort_wf_wfp,
+    
+    # both
+    fe_mg_both_india = fe_mg + fe_mg_fort_rice_india + fe_mg_fort_wf_india,
+    fe_mg_both_wfp   = fe_mg + fe_mg_fort_rice_wfp + fe_mg_fort_wf_wfp,
+    folate_mcg_both_india = folate_mcg + folate_mcg_fort_rice_india + folate_mcg_fort_wf_india,
+    folate_mcg_both_wfp   = folate_mcg + folate_mcg_fort_rice_wfp + folate_mcg_fort_wf_wfp,
+    vitb12_mcg_both_india = vitb12_mcg + vitb12_mcg_fort_rice_india + vitb12_mcg_fort_wf_india,
+    vitb12_mcg_both_wfp   = vitb12_mcg + vitb12_mcg_fort_rice_wfp + vitb12_mcg_fort_wf_wfp
   )
 
-df_long |>
-  summarise(
-    mean(fe_mg_base),
-    mean(fe_mg_rice),
-    mean(fe_mg_wheat),
-    mean(fe_mg_both)
-  )
+# ── Reshape -----------------------------------------------------------------
 
 
 fort_scenarios <- df_long |>
-  pivot_longer(
-    cols = matches("^(fe_mg|folate_mcg|vitb12_mcg)_(base|rice|wheat|both)$"),
-    names_to = c("nutrient", "scenario"),
-    names_pattern = "(.*)_(base|rice|wheat|both)",
-    values_to = "value"
+  dplyr::select(
+    hhid,
+    dplyr::matches("fe_mg|folate_mcg|vitb12_mcg")
   ) |>
-  pivot_wider(
-    names_from = nutrient,
-    values_from = value
-  ) |>
-  left_join(ind_nss2223_hh_info, by = "hhid") |>
-  left_join(ration_card_total, by = "hhid") |>
-  mutate(res_quintile = paste(res, res_quintile))
+  dplyr::left_join(ind_nss2223_hh_info, by = "hhid") |>
+  dplyr::left_join(ration_card_total, by = "hhid")
 
 
-fort_scenarios |>
-  filter(scenario == "both") |>
-  summarise(mean(fe_mg))
-
-
-# ── Shared data prep pipeline ──────────────────────────────────────────────────
+# ── Inadequacy prep ---------------------------------------------------------
 
 prep_inadequacy <- function(df) {
   scen_label <- unique(df$scenario)
-
-  national_row <- df |>
+  
+  national <- df |>
     general_inadequacy(ear_table = ear_table) |>
-    mutate(
-      scenario = scen_label,
-      state_name = "National",
-      region = "National"
-    )
-
-  state_rows <- df |>
+    dplyr::mutate(state_name = "National", region = "National")
+  
+  states <- df |>
     general_inadequacy(group = adm1, ear_table = ear_table) |>
-    mutate(scenario = scen_label) |>
-    left_join(nss_states, by = "adm1") |>
-    left_join(state_order, by = c("state_name" = "state")) |>
-    arrange(region, state_name)
-
-  bind_rows(national_row, state_rows)
+    dplyr::left_join(nss_states, by = "adm1") |>
+    dplyr::left_join(state_order, by = c("state_name" = "state")) |>
+    dplyr::arrange(region, state_name)
+  
+  dplyr::bind_rows(national, states) %>% 
+    select(-national,-adm1)
 }
 
-
-# ── gt formatter ──────────────────────────────────────────────────────────────
-
-make_inad_gt <- function(df) {
-  df |>
-    mutate(
-      folate = sprintf("%.1f (%.1f)", folate_mcg_inad, folate_mcg_inad_se),
-      vitb12 = sprintf("%.1f (%.1f)", vitb12_mcg_inad, vitb12_mcg_inad_se),
-      fe = sprintf("%.1f (%.1f)", fe_inad, fe_inad_se)
-    ) |>
-    select(region, state_name, folate, vitb12, fe) |>
-    filter(!is.na(region)) |>
-    gt(rowname_col = "state_name", groupname_col = "region") |>
-    cols_label(
-      folate = "Folate inadequacy (%)",
-      vitb12 = "Vitamin B12 inadequacy (%)",
-      fe = "Iron inadequacy (%)"
-    ) |>
-    tab_style(
-      style = cell_text(weight = "bold"),
-      locations = cells_body(rows = state_name == "National")
-    ) |>
-    cols_hide("region")
-}
-
-
-# ── Single-table builder ───────────────────────────────────────────────────────
+# ── Table builder -----------------------------------------------------------
 
 make_gt_for_group <- function(scen, card_status = NULL) {
-  label <- if (is.null(card_status)) "All" else paste("Card:", card_status)
-
-  fort_scenarios |>
-    filter(
-      scenario == scen,
+  
+  df <- fort_scenarios |>
+    dplyr::filter(
       if (!is.null(card_status)) any_card == card_status else TRUE
-    ) |>
-    prep_inadequacy() |>
-    make_inad_gt() |>
-    tab_header(
-      title = paste0("Scenario: ", scen, " (", FORT_SPEC, " spec)"),
-      subtitle = paste0("Group: ", label)
     )
+  
+  compute <- function(scen, spec) {
+    
+    suffix <- if (spec == "base") {
+      "base"
+    } else {
+      paste0(scen, "_", spec)
+    }
+    
+    df_tmp <- df |>
+      dplyr::mutate(
+        fe_mg = .data[[paste0("fe_mg_", suffix)]],
+        folate_mcg = .data[[paste0("folate_mcg_", suffix)]],
+        vitb12_mcg = .data[[paste0("vitb12_mcg_", suffix)]]
+      )
+    
+    prep_inadequacy(df_tmp)
+  }
+  
+  
+  base  <- compute("base",  "base")
+  india <- compute(scen,   "india")
+  wfp   <- compute(scen,   "wfp")
+  
+  
+  
+  merged <- base |>
+    dplyr::rename(
+      folate_base  = folate_mcg_inad,
+      b12_base     = vitb12_mcg_inad,
+      iron_base    = fe_inad
+    ) |>
+    dplyr::left_join(
+      india |>
+        dplyr::rename(
+          folate_india  = folate_mcg_inad,
+          b12_india     = vitb12_mcg_inad,
+          iron_india    = fe_inad
+        ),
+      by = c("state_name", "region")
+    ) |>
+    dplyr::left_join(
+      wfp |>
+        dplyr::rename(
+          folate_wfp  = folate_mcg_inad,
+          b12_wfp     = vitb12_mcg_inad,
+          iron_wfp    = fe_inad
+        ),
+      by = c("state_name", "region")
+    )
+  
+  
+  
+  names(merged)
+  
+  
+  
+  merged |>
+    dplyr::transmute(
+      region,
+      state_name,
+      
+      folate_base  = round(folate_base),
+      folate_india = round(folate_india),
+      folate_wfp   = round(folate_wfp),
+      
+      b12_base  = round(b12_base),
+      b12_india = round(b12_india),
+      b12_wfp   = round(b12_wfp),
+      
+      iron_base  = round(iron_base),
+      iron_india = round(iron_india),
+      iron_wfp   = round(iron_wfp)
+    )|>
+    gt::gt(
+      rowname_col = "state_name",
+      groupname_col = "region"
+    ) |>
+    gt::cols_label(
+      folate_base  = "Base",
+      folate_india = "India",
+      folate_wfp   = "WFP",
+      
+      b12_base  = "Base",
+      b12_india = "India",
+      b12_wfp   = "WFP",
+      
+      iron_base  = "Base",
+      iron_india = "India",
+      iron_wfp   = "WFP"
+    ) |>
+    
+    gt::tab_spanner(
+      label = "Iron",
+      columns = c(iron_base, iron_india, iron_wfp) 
+    ) %>% 
+    gt::tab_spanner(
+      label = "Folate",
+      columns = c(folate_base, folate_india, folate_wfp)
+    ) |>
+    gt::tab_spanner(
+      label = "Vitamin B12",
+      columns = c(b12_base, b12_india, b12_wfp)
+    ) |>
+    gt::tab_header(
+      title = paste0(tools::toTitleCase(scen), " fortification scenario"),
+      subtitle = ifelse(
+        is.null(card_status),
+        "All households",
+        "Ration card households"
+      )
+    )
+  
 }
 
+# ── Final tables ------------------------------------------------------------
 
-# ── Batch table builder ────────────────────────────────────────────────────────
+scenarios <- c("rice","wheat","both")
 
-scenarios <- c("base", "rice", "wheat", "both")
-
-subgroups <- list(
-  all = function(df) df,
-  card = function(df) filter(df, any_card == "Yes")
-)
-
-gt_tables <- tidyr::expand_grid(
+tables <- tidyr::expand_grid(
   scenario = scenarios,
-  subgroup = names(subgroups)
+  group = c("all","card")
 ) |>
-  mutate(
-    name = paste0(scenario, "_", subgroup),
-    gt = map2(scenario, subgroup, \(scen, grp) {
-      fort_scenarios |>
-        filter(scenario == scen) |>
-        subgroups[[grp]]() |>
-        prep_inadequacy() |>
-        make_inad_gt() |>
-        tab_header(
-          title = paste0("Scenario: ", scen, " (", FORT_SPEC, " spec)"),
-          subtitle = paste0("Group: ", grp)
-        )
-    })
-  ) |>
-  select(name, gt) |>
-  tibble::deframe()
+  dplyr::mutate(
+    gt = purrr::map2(
+      scenario,
+      group,
+      ~make_gt_for_group(.x,
+                         if(.y=="card") "Yes" else NULL)
+    )
+  )
 
-# ---- Example usage ----
+tables$gt
 
-gt_tables$both_card
-
+type
 
 # ---- Save to HTML ---------------------------------------------------------
 library(flextable)
@@ -873,21 +968,32 @@ gt_to_html <- function(gt_tbl) {
   HTML(as_raw_html(gt_tbl))
 }
 
-for (name in names(gt_tables)) {
-  html_doc <- tagList(
-    tags$h1(paste0(name, " — ", FORT_SPEC, " spec")),
-    gt_to_html(gt_tables[[name]])
-  )
-
-  save_html(
-    html_doc,
-    file = paste0(
+tables |>
+  rowwise() |>
+  mutate(
+    html_file = paste0(
       figure_path,
       "objective_3/",
-      name,
-      "_",
-      FORT_SPEC_SLUG,
-      ".html"
+      scenario, "_", group, "_", FORT_SPEC_SLUG, ".html"
+    ),
+    docx_file = sub("\\.html$", ".docx", html_file)
+  ) |>
+  group_walk(~ {
+    
+    # ---- Save HTML --------------------------------------------------------
+    html_doc <- tagList(
+      tags$h1(paste0(.x$scenario, " — ", .x$group, " — ", FORT_SPEC, " spec")),
+      gt_to_html(.x$gt[[1]])
     )
-  )
-}
+    
+    save_html(html_doc, file = .x$html_file)
+    
+    # ---- Convert to Word --------------------------------------------------
+    
+    rmarkdown::pandoc_convert(
+      input  = normalizePath(.x$html_file),
+      output = normalizePath(.x$docx_file, mustWork = FALSE)
+    )
+    
+    
+  })
