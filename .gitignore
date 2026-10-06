@@ -2,8 +2,12 @@
 .Rhistory
 .RData
 .Ruserdata
+*.DS_Store
 *.Rproj
+.Rapp.history
+# Raw survey microdata (not redistributable)
+data/raw/HCES_2022_23/
 
-data/raw/
-data/processed/
+# Generated figures
 figures/
+data/
